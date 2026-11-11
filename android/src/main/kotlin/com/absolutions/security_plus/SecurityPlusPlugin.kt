@@ -1,3 +1,5 @@
+// Safebox fork: Android security checks run off the main thread to avoid ANRs
+// (RootBeer props I/O, Frida ps scan) during MethodChannel calls.
 package com.absolutions.security_plus
 
 import android.content.Context
@@ -25,26 +27,54 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 import java.io.File
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 /** SecurityPlusPlugin */
 class SecurityPlusPlugin: FlutterPlugin, MethodCallHandler {
     private lateinit var channel : MethodChannel
     private lateinit var context: Context
+    private var securityExecutor: ExecutorService? = null
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         context = flutterPluginBinding.applicationContext
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "security_plus")
         channel.setMethodCallHandler(this)
+        securityExecutor = Executors.newSingleThreadExecutor()
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
-            "isRooted" -> result.success(isRooted())
-            "isEmulator" -> result.success(isEmulator())
-            "isOnExternalStorage" -> result.success(isOnExternalStorage(context))
-            "isDevelopmentModeEnable" -> result.success(developmentModeCheck(context))
-            "isMockLocationEnabled" -> result.success(isMockLocationEnabled(context))
+            "isRooted",
+            "isEmulator",
+            "isOnExternalStorage",
+            "isDevelopmentModeEnable",
+            "isMockLocationEnabled" -> dispatchSecurityCheck(call, result)
             else -> result.notImplemented()
+        }
+    }
+
+    private fun dispatchSecurityCheck(call: MethodCall, result: Result) {
+        val executor = securityExecutor
+        if (executor == null) {
+            result.error("UNAVAILABLE", "Plugin not attached", null)
+            return
+        }
+        val appContext = context
+        executor.execute {
+            try {
+                val value = when (call.method) {
+                    "isRooted" -> isRooted()
+                    "isEmulator" -> isEmulator()
+                    "isOnExternalStorage" -> isOnExternalStorage(appContext)
+                    "isDevelopmentModeEnable" -> developmentModeCheck(appContext)
+                    "isMockLocationEnabled" -> isMockLocationEnabled(appContext)
+                    else -> throw IllegalStateException("Unhandled method: ${call.method}")
+                }
+                result.success(value)
+            } catch (e: Exception) {
+                result.error("ERROR", e.message, null)
+            }
         }
     }
 
@@ -281,5 +311,7 @@ class SecurityPlusPlugin: FlutterPlugin, MethodCallHandler {
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        securityExecutor?.shutdown()
+        securityExecutor = null
     }
 }

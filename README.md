@@ -5,6 +5,13 @@ A comprehensive Flutter security plugin that provides advanced security features
 [![pub package](https://img.shields.io/pub/v/security_plus.svg)](https://pub.dev/packages/security_plus)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## Safebox fork (Android ANR)
+
+This fork runs Android `MethodChannel` security work on a dedicated background
+executor (`securityExecutor`) so RootBeer / Frida checks do not block the UI
+thread. Consumed by Safebox via git tag `v4.0.0+safebox.1`. Detection logic is
+unchanged from upstream; only threading differs.
+
 ## Features
 
 - 🛡️ **Advanced Root Detection**
